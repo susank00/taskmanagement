@@ -1,36 +1,51 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import axios from "axios";
 
 const Home = () => {
   const [tasks, setTasks] = useState([]);
   const [taskDescription, setTaskDescription] = useState("");
+  const [taskTitle, setTaskTitle] = useState(""); // New state for title
   const [editTaskId, setEditTaskId] = useState(null);
   const [editDescription, setEditDescription] = useState("");
+  const [editTitle, setEditTitle] = useState(""); // New state for editing title
+
+  // Fetch tasks on component mount
+  useEffect(() => {
+    const fetchTasks = async () => {
+      const response = await axios.get("http://localhost:3001/tasks");
+      setTasks(response.data);
+    };
+    fetchTasks();
+  }, []);
 
   // Add a new task
-  const addTask = (e) => {
+  const addTask = async (e) => {
     e.preventDefault();
-    if (taskDescription.trim() === "") return;
+    if (taskDescription.trim() === "" || taskTitle.trim() === "") return; // Ensure title is not empty
 
     const newTask = {
-      id: Date.now(),
+      title: taskTitle,
       description: taskDescription,
       status: "Incomplete",
     };
 
-    setTasks([...tasks, newTask]);
-    setTaskDescription("");
+    const response = await axios.post("http://localhost:3001/tasks", newTask);
+    setTasks([...tasks, response.data]); // Update tasks with the newly created task
+    setTaskTitle(""); // Reset title input
+    setTaskDescription(""); // Reset description input
   };
 
   // Delete a task
-  const deleteTask = (id) => {
-    const updatedTasks = tasks.filter((task) => task.id !== id);
+  const deleteTask = async (id) => {
+    await axios.delete(`http://localhost:3001/tasks/${id}`);
+    const updatedTasks = tasks.filter((task) => task._id !== id);
     setTasks(updatedTasks);
   };
 
   // Toggle task status
   const toggleStatus = (id) => {
     const updatedTasks = tasks.map((task) => {
-      if (task.id === id) {
+      if (task._id === id) {
         return {
           ...task,
           status: task.status === "Incomplete" ? "Complete" : "Incomplete",
@@ -42,26 +57,29 @@ const Home = () => {
   };
 
   // Start editing a task
-  const startEdit = (id, currentDescription) => {
-    setEditTaskId(id);
-    setEditDescription(currentDescription);
+  const startEdit = (task) => {
+    setEditTaskId(task._id);
+    setEditTitle(task.title);
+    setEditDescription(task.description);
   };
 
   // Save edited task
-  const saveEdit = (id) => {
-    const updatedTasks = tasks.map((task) => {
-      if (task.id === id) {
-        return { ...task, description: editDescription };
-      }
-      return task;
-    });
+  const saveEdit = async (id) => {
+    const updatedTask = { title: editTitle, description: editDescription };
+    const response = await axios.put(
+      `http://localhost:3001/tasks/${id}`,
+      updatedTask
+    );
+    const updatedTasks = tasks.map((task) =>
+      task._id === id ? response.data : task
+    );
     setTasks(updatedTasks);
     setEditTaskId(null);
     setEditDescription("");
+    setEditTitle(""); // Reset title when done editing
   };
 
   return (
-    // <div className="flex flex-col items-center justify-center p-6 bg-gradient-to-br from-green-300 via-green-400 to-green-600 min-h-screen">
     <div className="flex justify-center items-center h-screen bg-gradient-to-br from-blue-400 via-blue-500 to-indigo-800 animate-gradient place-content-center">
       <h1 className="text-5xl font-extrabold text-center text-white mb-8">
         Task Management Dashboard
@@ -72,6 +90,13 @@ const Home = () => {
         onSubmit={addTask}
         className="flex justify-center items-center flex-col ml-84 bg-white p-6 shadow-lg rounded-lg w-full max-w-md"
       >
+        <input
+          type="text"
+          placeholder="Enter task title" // Title input
+          value={taskTitle}
+          onChange={(e) => setTaskTitle(e.target.value)}
+          className="w-full p-3 mb-4 rounded-lg border-2 border-gray-300 focus:outline-none focus:border-blue-500 transition"
+        />
         <input
           type="text"
           placeholder="Enter task description"
@@ -98,6 +123,9 @@ const Home = () => {
             <thead>
               <tr>
                 <th className="py-4 px-6 bg-blue-600 text-white text-left font-bold text-xl">
+                  Title {/* Added Title column */}
+                </th>
+                <th className="py-4 px-6 bg-blue-600 text-white text-left font-bold text-xl">
                   Description
                 </th>
                 <th className="py-4 px-6 bg-blue-600 text-white text-left font-bold text-xl">
@@ -110,9 +138,21 @@ const Home = () => {
             </thead>
             <tbody>
               {tasks.map((task) => (
-                <tr key={task.id} className="border-b">
+                <tr key={task._id} className="border-b">
                   <td className="py-4 px-6 text-lg">
-                    {editTaskId === task.id ? (
+                    {editTaskId === task._id ? (
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        className="p-2 w-full border rounded-lg"
+                      />
+                    ) : (
+                      task.title
+                    )}
+                  </td>
+                  <td className="py-4 px-6 text-lg">
+                    {editTaskId === task._id ? (
                       <input
                         type="text"
                         value={editDescription}
@@ -127,43 +167,51 @@ const Home = () => {
                     <span
                       className={`px-3 py-1 rounded-full text-lg font-semibold ${
                         task.status === "Complete"
-                          ? "bg-green-200 text-green-800"
-                          : "bg-red-200 text-red-800"
+                          ? "bg-green-200 text-green-600"
+                          : "bg-red-200 text-red-600"
                       }`}
                     >
                       {task.status}
                     </span>
                   </td>
-                  <td className="py-4 px-6 space-x-2">
-                    {editTaskId === task.id ? (
-                      <button
-                        onClick={() => saveEdit(task.id)}
-                        className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition"
-                      >
-                        Save
-                      </button>
+                  <td className="py-4 px-6">
+                    {editTaskId === task._id ? (
+                      <>
+                        <button
+                          onClick={() => saveEdit(task._id)}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditTaskId(null)}
+                          className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition ml-2"
+                        >
+                          Cancel
+                        </button>
+                      </>
                     ) : (
-                      <button
-                        onClick={() => startEdit(task.id, task.description)}
-                        className="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition"
-                      >
-                        Edit
-                      </button>
+                      <>
+                        <button
+                          onClick={() => toggleStatus(task._id)}
+                          className="bg-yellow-400 text-white px-4 py-2 rounded-lg hover:bg-yellow-500 transition"
+                        >
+                          Toggle Status
+                        </button>
+                        <button
+                          onClick={() => startEdit(task)}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition ml-2"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => deleteTask(task._id)}
+                          className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition ml-2"
+                        >
+                          Delete
+                        </button>
+                      </>
                     )}
-                    <button
-                      onClick={() => deleteTask(task.id)}
-                      className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition"
-                    >
-                      Delete
-                    </button>
-                    <button
-                      onClick={() => toggleStatus(task.id)}
-                      className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition"
-                    >
-                      {task.status === "Complete"
-                        ? "Mark Incomplete"
-                        : "Mark Complete"}
-                    </button>
                   </td>
                 </tr>
               ))}
